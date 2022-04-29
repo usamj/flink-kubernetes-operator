@@ -24,17 +24,13 @@ import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKube
 import org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.kubernetes.utils.Constants;
-import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
 import io.fabric8.kubernetes.api.model.Container;
-import io.fabric8.kubernetes.api.model.ContainerBuilder;
 import io.fabric8.kubernetes.api.model.ContainerPort;
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
-import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.LocalObjectReference;
 import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +38,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,22 +49,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** @link InitStandaloneTaskManagerDecorator unit tests */
 public class InitStandaloneTaskManagerDecoratorTest extends ParametersTestBase {
-    private static final String TEMPLATE_PORT_NAME = "user-port";
-    private static final int TEMPLATE_PORT = 9458;
-
-    private final Map<String, String> templateEnvs =
-            TestUtils.generateTestStringStringMap("TEMPLATE_KEY", "VAL", 2);
-
-    private final Map<String, String> templateLabels =
-            TestUtils.generateTestStringStringMap("template-label", "value", 2);
-
-    private final Map<String, String> templateAnnotations =
-            TestUtils.generateTestStringStringMap("template-annotation", "value", 2);
-
-    private final Map<String, String> templateNodeSelector =
-            TestUtils.generateTestStringStringMap("template-node-selector", "value", 2);
-
-    private final List<String> templateImagePullSecrets = Arrays.asList("ts1", "ts2", "ts3");
 
     private Pod resultPod;
     private Container resultMainContainer;
@@ -88,59 +67,6 @@ public class InitStandaloneTaskManagerDecoratorTest extends ParametersTestBase {
         final FlinkPod resultFlinkPod = decorator.decorateFlinkPod(createPodTemplate());
         resultPod = resultFlinkPod.getPodWithoutMainContainer();
         resultMainContainer = resultFlinkPod.getMainContainer();
-    }
-
-    private FlinkPod createPodTemplate() {
-        List<EnvVar> envVars = new ArrayList<>();
-        templateEnvs.forEach(
-                (k, v) -> envVars.add(new EnvVarBuilder().withName(k).withValue(v).build()));
-
-        Container mainContainer =
-                new ContainerBuilder()
-                        .withImagePullPolicy("templatePullPolicy")
-                        .withImage("templateImage")
-                        .withResources(
-                                KubernetesUtils.getResourceRequirements(
-                                        new ResourceRequirements(),
-                                        1234,
-                                        102,
-                                        Collections.emptyMap(),
-                                        Collections.emptyMap()))
-                        .withPorts(
-                                new ContainerPortBuilder()
-                                        .withName(TEMPLATE_PORT_NAME)
-                                        .withContainerPort(TEMPLATE_PORT)
-                                        .build())
-                        .withEnv(envVars)
-                        .build();
-
-        return new FlinkPod.Builder()
-                .withMainContainer(mainContainer)
-                .withPod(
-                        new PodBuilder()
-                                .withApiVersion("templateAPIVersion")
-                                .editOrNewSpec()
-                                .withServiceAccountName("templateServiceAccountName")
-                                .withServiceAccount("templateServiceAccount")
-                                .endSpec()
-                                .editOrNewMetadata()
-                                .addToLabels(templateLabels)
-                                .addToAnnotations(templateAnnotations)
-                                .endMetadata()
-                                .editOrNewSpec()
-                                .addToImagePullSecrets(getImagePullSecrets())
-                                .addToNodeSelector(templateNodeSelector)
-                                .endSpec()
-                                .build())
-                .build();
-    }
-
-    private LocalObjectReference[] getImagePullSecrets() {
-        return templateImagePullSecrets.stream()
-                .map(String::trim)
-                .filter(secret -> !secret.isEmpty())
-                .map(LocalObjectReference::new)
-                .toArray(LocalObjectReference[]::new);
     }
 
     @Test
@@ -192,7 +118,6 @@ public class InitStandaloneTaskManagerDecoratorTest extends ParametersTestBase {
                                 .withContainerPort(TEMPLATE_PORT)
                                 .build());
 
-        List<ContainerPort> ports = resultMainContainer.getPorts();
         assertThat(
                 resultMainContainer.getPorts(),
                 containsInAnyOrder(expectedContainerPorts.toArray()));

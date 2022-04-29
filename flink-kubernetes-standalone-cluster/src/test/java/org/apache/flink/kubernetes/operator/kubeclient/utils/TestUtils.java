@@ -34,6 +34,7 @@ public class TestUtils {
 
     public static final String CLUSTER_ID = "test-cluster";
     public static final String SERVICE_ACCOUNT = "flink-operator";
+    public static final String TEST_NAMESPACE = "flink-operator-test";
 
     public static final String TASK_MANAGER_MEMORY = "2048m";
     public static final String JOB_MANAGER_MEMORY = "1024m";
@@ -71,8 +72,9 @@ public class TestUtils {
 
     public static Configuration createTestFlinkConfig() {
         Configuration flinkConf = new Configuration();
-        flinkConf.setString(KubernetesConfigOptions.CLUSTER_ID, CLUSTER_ID);
-        flinkConf.setString(KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT, SERVICE_ACCOUNT);
+        flinkConf.set(KubernetesConfigOptions.CLUSTER_ID, CLUSTER_ID);
+        flinkConf.set(KubernetesConfigOptions.NAMESPACE, TEST_NAMESPACE);
+        flinkConf.set(KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT, SERVICE_ACCOUNT);
         flinkConf.set(KubernetesConfigOptions.CONTAINER_IMAGE, IMAGE);
         flinkConf.set(
                 KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY,

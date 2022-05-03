@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -189,6 +188,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             return flinkService.cancelJob(
                     JobID.fromHexString(Preconditions.checkNotNull(jobIdString)),
                     UpgradeMode.SAVEPOINT,
+                    flinkApp,
                     effectiveConfig);
         }
         if (upgradeMode == UpgradeMode.STATELESS) {
@@ -198,6 +198,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
         return flinkService.cancelJob(
                 jobIdString != null ? JobID.fromHexString(jobIdString) : null,
                 upgradeMode,
+                flinkApp,
                 effectiveConfig);
     }
 
@@ -224,6 +225,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                 flinkService.cancelJob(
                         JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId()),
                         UpgradeMode.STATELESS,
+                        flinkApp,
                         effectiveConfig);
                 return;
             } catch (Exception e) {
@@ -231,7 +233,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             }
         }
 
-        FlinkUtils.deleteCluster(flinkApp, kubernetesClient, true);
+        flinkService.deleteCluster(flinkApp, effectiveConfig, true);
     }
 
     private void triggerSavepoint(FlinkDeployment deployment, Configuration effectiveConfig)

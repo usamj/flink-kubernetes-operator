@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
@@ -249,6 +250,71 @@ public class DefaultValidatorTest {
                     dep.getStatus().getReconciliationStatus().getLastReconciledSpec().setJob(null);
                 },
                 "Cannot switch from session to job cluster");
+
+        testError(
+                dep -> {
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .getLastReconciledSpec()
+                            .setMode(KubernetesDeploymentMode.NATIVE);
+                    dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+                },
+                "Cannot switch from native kubernetes to standalone kubernetes cluster");
+
+        testError(
+                dep -> {
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
+                    dep.getStatus().getReconciliationStatus().getLastReconciledSpec().setMode(null);
+                    dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+                },
+                "Cannot switch from native kubernetes to standalone kubernetes cluster");
+
+        testError(
+                dep -> {
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .getLastReconciledSpec()
+                            .setMode(KubernetesDeploymentMode.STANDALONE);
+                    dep.getSpec().setMode(KubernetesDeploymentMode.NATIVE);
+                },
+                "Cannot switch from standalone kubernetes to native kubernetes cluster");
+
+        testError(
+                dep -> {
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .getLastReconciledSpec()
+                            .setMode(KubernetesDeploymentMode.STANDALONE);
+                    dep.getSpec().setMode(null);
+                },
+                "Cannot switch from standalone kubernetes to native kubernetes cluster");
 
         // Test upgrade mode change validation
         testError(

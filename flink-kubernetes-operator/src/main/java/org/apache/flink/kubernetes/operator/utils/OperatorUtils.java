@@ -30,13 +30,18 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.FilterWatchListDeletable;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
 import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -45,27 +50,70 @@ public class OperatorUtils {
 
     private static final String NAMESPACES_SPLITTER_KEY = ",";
 
-    public static InformerEventSource<Deployment, HasMetadata> createJmDepInformerEventSource(
+    public static final String ALL_NAMESPACE_NAME = "all";
+
+    private static final String NATIVE_JM_POSTFIX = "-native-jm";
+
+    private static final String STANDALONE_JM_POSTFIX = "-standalone-jm";
+    private static final String STANDALONE_TM_POSTFIX = "-standalone-tm";
+
+    public static List<EventSource> createDeploymentEventSources(
             KubernetesClient kubernetesClient, String namespace) {
-        return createJmDepInformerEventSource(
-                kubernetesClient.apps().deployments().inNamespace(namespace), namespace);
+        List<EventSource> deploymentEventSources = new ArrayList<>();
+        FilterWatchListDeletable<Deployment, DeploymentList> filteredClient =
+                kubernetesClient.apps().deployments().inNamespace(namespace);
+
+        deploymentEventSources.addAll(
+                createNativeDeploymentEventSources(filteredClient, namespace));
+        deploymentEventSources.addAll(
+                createStandaloneDeploymentEventSources(filteredClient, namespace));
+        return deploymentEventSources;
     }
 
-    public static InformerEventSource<Deployment, HasMetadata> createJmDepInformerEventSource(
+    public static List<EventSource> createDeploymentEventSources(
             KubernetesClient kubernetesClient) {
-        return createJmDepInformerEventSource(
-                kubernetesClient.apps().deployments().inAnyNamespace(), "all");
+        FilterWatchListDeletable<Deployment, DeploymentList> filteredClient =
+                kubernetesClient.apps().deployments().inAnyNamespace();
+
+        List<EventSource> deploymentEventSources = new ArrayList<>();
+        deploymentEventSources.addAll(
+                createStandaloneDeploymentEventSources(filteredClient, ALL_NAMESPACE_NAME));
+        deploymentEventSources.addAll(
+                createNativeDeploymentEventSources(filteredClient, ALL_NAMESPACE_NAME));
+
+        return deploymentEventSources;
     }
 
-    private static InformerEventSource<Deployment, HasMetadata> createJmDepInformerEventSource(
-            FilterWatchListDeletable<Deployment, DeploymentList> filteredClient, String name) {
+    private static List<EventSource> createNativeDeploymentEventSources(
+            FilterWatchListDeletable<Deployment, DeploymentList> filteredClient, String namespace) {
+        final Map<String, String> labels = new HashMap<>();
+        labels.put(Constants.LABEL_TYPE_KEY, Constants.LABEL_TYPE_NATIVE_TYPE);
+        labels.put(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER);
+        return List.of(
+                createDeploymentInformerEventSource(
+                        filteredClient, getNativeJmDeploymentIdentifier(namespace), labels));
+    }
+
+    public static List<EventSource> createStandaloneDeploymentEventSources(
+            FilterWatchListDeletable<Deployment, DeploymentList> filteredClient, String namespace) {
+        final Map<String, String> commonLabels = new HashMap<>();
+        commonLabels.put(
+                Constants.LABEL_TYPE_KEY, StandaloneKubernetesUtils.LABEL_TYPE_STANDALONE_TYPE);
+
+        final Map<String, String> jmLabels = new HashMap<>(commonLabels);
+        jmLabels.put(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER);
+
+        return List.of(
+                createDeploymentInformerEventSource(
+                        filteredClient, getStandaloneJmDeploymentIdentifier(namespace), jmLabels));
+    }
+
+    private static InformerEventSource<Deployment, HasMetadata> createDeploymentInformerEventSource(
+            FilterWatchListDeletable<Deployment, DeploymentList> filteredClient,
+            String name,
+            Map<String, String> labels) {
         SharedIndexInformer<Deployment> informer =
-                filteredClient
-                        .withLabel(Constants.LABEL_TYPE_KEY, Constants.LABEL_TYPE_NATIVE_TYPE)
-                        .withLabel(
-                                Constants.LABEL_COMPONENT_KEY,
-                                Constants.LABEL_COMPONENT_JOB_MANAGER)
-                        .runnableInformer(0);
+                filteredClient.withLabels(labels).runnableInformer(0);
 
         return new InformerEventSource<>(informer, Mappers.fromLabel(Constants.LABEL_APP_KEY)) {
             @Override
@@ -94,5 +142,13 @@ public class OperatorUtils {
                         ? sessionJob.getMetadata().getNamespace()
                         : null;
         return context.getSecondaryResource(FlinkDeployment.class, identifier);
+    }
+
+    public static String getStandaloneJmDeploymentIdentifier(String namespace) {
+        return namespace + STANDALONE_JM_POSTFIX;
+    }
+
+    public static String getNativeJmDeploymentIdentifier(String namespace) {
+        return namespace + NATIVE_JM_POSTFIX;
     }
 }

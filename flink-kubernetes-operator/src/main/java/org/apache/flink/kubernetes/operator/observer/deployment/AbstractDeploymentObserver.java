@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
@@ -30,6 +31,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -86,7 +88,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             return;
         }
 
-        Optional<Deployment> deployment = getSecondaryResource(flinkApp, context);
+        Optional<Deployment> deployment = getJmDeployment(flinkApp, context);
         if (deployment.isPresent()) {
             DeploymentStatus status = deployment.get().getStatus();
             DeploymentSpec spec = deployment.get().getSpec();
@@ -126,12 +128,37 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
     }
 
-    private Optional<Deployment> getSecondaryResource(FlinkDeployment flinkApp, Context context) {
-        return context.getSecondaryResource(
-                Deployment.class,
+    private Optional<Deployment> getJmDeployment(FlinkDeployment flinkDeployment, Context context) {
+        KubernetesDeploymentMode mode = KubernetesDeploymentMode.getDeploymentMode(flinkDeployment);
+        if (mode == KubernetesDeploymentMode.NATIVE) {
+            return getJmNativeDeployment(flinkDeployment, context);
+        }
+        return getJmStandaloneDeployment(flinkDeployment, context);
+    }
+
+    private Optional<Deployment> getJmStandaloneDeployment(
+            FlinkDeployment flinkApp, Context context) {
+        String namespace =
                 operatorConfiguration.getWatchedNamespaces().size() > 1
                         ? flinkApp.getMetadata().getNamespace()
-                        : null);
+                        : OperatorUtils.ALL_NAMESPACE_NAME;
+
+        return getSecondaryResource(
+                context, OperatorUtils.getStandaloneJmDeploymentIdentifier(namespace));
+    }
+
+    private Optional<Deployment> getJmNativeDeployment(FlinkDeployment flinkApp, Context context) {
+        String namespace =
+                operatorConfiguration.getWatchedNamespaces().size() > 1
+                        ? flinkApp.getMetadata().getNamespace()
+                        : OperatorUtils.ALL_NAMESPACE_NAME;
+
+        return getSecondaryResource(
+                context, OperatorUtils.getNativeJmDeploymentIdentifier(namespace));
+    }
+
+    private Optional<Deployment> getSecondaryResource(Context context, String identifier) {
+        return context.getSecondaryResource(Deployment.class, identifier);
     }
 
     private void checkFailedCreate(DeploymentStatus status) {
@@ -145,7 +172,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     }
 
     private void checkCrashLoopBackoff(FlinkDeployment flinkApp, Configuration effectiveConfig) {
-        PodList jmPods = flinkService.getJmPodList(flinkApp, effectiveConfig);
+        PodList jmPods = flinkService.getJmPodList(effectiveConfig);
         for (Pod pod : jmPods.getItems()) {
             for (ContainerStatus cs : pod.getStatus().getContainerStatuses()) {
                 ContainerStateWaiting csw = cs.getState().getWaiting();

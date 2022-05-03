@@ -32,16 +32,19 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ReconcilerFactory {
 
     private final KubernetesClient kubernetesClient;
-    private final FlinkService flinkService;
+    private final FlinkService flinkNativeService;
+    private final FlinkService flinkStandaloneService;
     private final FlinkOperatorConfiguration operatorConfiguration;
     private final Map<Mode, Reconciler<FlinkDeployment>> reconcilerMap;
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
-            FlinkService flinkService,
+            FlinkService flinkNativeService,
+            FlinkService flinkStandaloneService,
             FlinkOperatorConfiguration operatorConfiguration) {
         this.kubernetesClient = kubernetesClient;
-        this.flinkService = flinkService;
+        this.flinkNativeService = flinkNativeService;
+        this.flinkStandaloneService = flinkStandaloneService;
         this.operatorConfiguration = operatorConfiguration;
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
@@ -53,10 +56,16 @@ public class ReconcilerFactory {
                     switch (mode) {
                         case SESSION:
                             return new SessionReconciler(
-                                    kubernetesClient, flinkService, operatorConfiguration);
+                                    kubernetesClient, flinkNativeService, operatorConfiguration);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    kubernetesClient, flinkService, operatorConfiguration);
+                                    kubernetesClient, flinkNativeService, operatorConfiguration);
+                        case STANDALONE_SESSION:
+                            return new SessionReconciler(
+                                    kubernetesClient, flinkStandaloneService, operatorConfiguration);
+                        case STANDALONE_APPLICATION:
+                            return new ApplicationReconciler(
+                                    kubernetesClient, flinkStandaloneService, operatorConfiguration);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

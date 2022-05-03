@@ -35,4 +35,7 @@ public class TaskManagerSpec {
 
     /** TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
     private Pod podTemplate;
+
+    /** Number of TaskManager replicas. Only used for Standalone clusters */
+    private int replicas;
 }

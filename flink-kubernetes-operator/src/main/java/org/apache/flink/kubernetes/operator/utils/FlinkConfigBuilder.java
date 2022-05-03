@@ -29,8 +29,10 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.StringUtils;
 
@@ -176,11 +178,29 @@ public class FlinkConfigBuilder {
                     spec.getTaskManager().getPodTemplate(),
                     effectiveConfig,
                     false);
+            if (spec.getTaskManager().getReplicas() > 0) {
+                effectiveConfig.set(
+                        StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS,
+                        spec.getTaskManager().getReplicas());
+            }
         }
         return this;
     }
 
     public FlinkConfigBuilder applyJobOrSessionSpec() throws URISyntaxException {
+        KubernetesDeploymentMode deploymentMode = KubernetesDeploymentMode.getDeploymentMode(spec);
+
+        if (deploymentMode == KubernetesDeploymentMode.STANDALONE) {
+            effectiveConfig.set(DeploymentOptions.TARGET, "remote");
+            effectiveConfig.set(
+                    StandaloneKubernetesConfigOptionsInternal.APPLICATION_CLUSTER, spec.getJob() != null);
+
+            if (spec.getJob() != null) {
+                effectiveConfig.set(PipelineOptions.CLASSPATHS, Collections.singletonList(spec.getJob().getJarURI()));
+            }
+            return this;
+        }
+
         if (spec.getJob() != null) {
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());

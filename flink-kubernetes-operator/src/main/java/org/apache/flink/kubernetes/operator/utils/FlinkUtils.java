@@ -20,32 +20,21 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
-import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
-import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.utils.Constants;
-import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.fabric8.kubernetes.api.model.ConfigMapList;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodList;
-import io.fabric8.kubernetes.api.model.Service;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Iterator;
-import java.util.Map;
-
-import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
@@ -125,150 +114,6 @@ public class FlinkUtils {
                 }
             }
         }
-    }
-
-    public static void deleteCluster(
-            FlinkDeployment flinkApp,
-            KubernetesClient kubernetesClient,
-            boolean deleteHaConfigmaps) {
-        deleteCluster(
-                flinkApp.getMetadata().getNamespace(),
-                flinkApp.getMetadata().getName(),
-                kubernetesClient,
-                deleteHaConfigmaps);
-    }
-
-    /**
-     * Delete Flink kubernetes cluster by deleting the kubernetes resources directly. Optionally
-     * allows deleting the native kubernetes HA resources as well.
-     *
-     * @param namespace Namespace where the Flink cluster is deployed
-     * @param clusterId ClusterId of the Flink cluster
-     * @param kubernetesClient Kubernetes client
-     * @param deleteHaConfigmaps Flag to indicate whether k8s HA metadata should be removed as well
-     */
-    public static void deleteCluster(
-            String namespace,
-            String clusterId,
-            KubernetesClient kubernetesClient,
-            boolean deleteHaConfigmaps) {
-        LOG.info("Deleting Flink cluster resources");
-        kubernetesClient
-                .apps()
-                .deployments()
-                .inNamespace(namespace)
-                .withName(KubernetesUtils.getDeploymentName(clusterId))
-                .cascading(true)
-                .delete();
-
-        if (deleteHaConfigmaps) {
-            // We need to wait for cluster shutdown otherwise HA configmaps might be recreated
-            waitForClusterShutdown(kubernetesClient, namespace, clusterId);
-            kubernetesClient
-                    .configMaps()
-                    .inNamespace(namespace)
-                    .withLabels(
-                            KubernetesUtils.getConfigMapLabels(
-                                    clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
-                    .delete();
-        }
-    }
-
-    /** Wait until the FLink cluster has completely shut down. */
-    public static void waitForClusterShutdown(
-            KubernetesClient kubernetesClient, String namespace, String clusterId) {
-
-        boolean jobManagerRunning = true;
-        boolean serviceRunning = true;
-
-        for (int i = 0; i < 60; i++) {
-            if (jobManagerRunning) {
-                PodList jmPodList = getJmPodList(kubernetesClient, namespace, clusterId);
-
-                if (jmPodList == null || jmPodList.getItems().isEmpty()) {
-                    jobManagerRunning = false;
-                }
-            }
-
-            if (serviceRunning) {
-                Service service =
-                        kubernetesClient
-                                .services()
-                                .inNamespace(namespace)
-                                .withName(
-                                        ExternalServiceDecorator.getExternalServiceName(clusterId))
-                                .fromServer()
-                                .get();
-                if (service == null) {
-                    serviceRunning = false;
-                }
-            }
-
-            if (!jobManagerRunning && !serviceRunning) {
-                break;
-            }
-            LOG.info("Waiting for cluster shutdown... ({})", i);
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        LOG.info("Cluster shutdown completed.");
-    }
-
-    /** Wait until the FLink cluster has completely shut down. */
-    public static void waitForClusterShutdown(
-            KubernetesClient kubernetesClient, Configuration conf) {
-        FlinkUtils.waitForClusterShutdown(
-                kubernetesClient,
-                conf.getString(KubernetesConfigOptions.NAMESPACE),
-                conf.getString(KubernetesConfigOptions.CLUSTER_ID));
-    }
-
-    public static PodList getJmPodList(
-            KubernetesClient kubernetesClient, String namespace, String clusterId) {
-        return kubernetesClient
-                .pods()
-                .inNamespace(namespace)
-                .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId))
-                .list();
-    }
-
-    public static void deleteJobGraphInKubernetesHA(
-            String clusterId, String namespace, KubernetesClient kubernetesClient) {
-        // The HA ConfigMap names have been changed from 1.15, so we use the labels to filter out
-        // them and delete job graph key
-        final Map<String, String> haConfigMapLabels =
-                KubernetesUtils.getConfigMapLabels(
-                        clusterId, Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY);
-        final ConfigMapList configMaps =
-                kubernetesClient
-                        .configMaps()
-                        .inNamespace(namespace)
-                        .withLabels(haConfigMapLabels)
-                        .list();
-
-        configMaps
-                .getItems()
-                .forEach(
-                        configMap -> {
-                            final boolean isDeleted =
-                                    configMap
-                                            .getData()
-                                            .entrySet()
-                                            .removeIf(FlinkUtils::isJobGraphKey);
-                            if (isDeleted) {
-                                LOG.info(
-                                        "Job graph in ConfigMap {} is deleted",
-                                        configMap.getMetadata().getName());
-                            }
-                        });
-        kubernetesClient.resourceList(configMaps).inNamespace(namespace).createOrReplace();
-    }
-
-    private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
-        return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX);
     }
 
     public static boolean isKubernetesHAActivated(Configuration configuration) {

@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -58,7 +57,7 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
                 == flinkApp.getStatus().getJobManagerDeploymentStatus()) {
             shutdown(flinkApp, effectiveConfig);
         } else {
-            FlinkUtils.deleteCluster(flinkApp, kubernetesClient, true);
+            flinkService.deleteCluster(flinkApp, effectiveConfig, true);
         }
 
         return DeleteControl.defaultDelete();

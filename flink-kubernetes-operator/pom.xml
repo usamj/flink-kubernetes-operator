@@ -33,6 +33,7 @@ under the License.
 
     <properties>
         <awaitility.version>4.1.0</awaitility.version>
+        <mockito.version>2.21.0</mockito.version>
         <plugins.tmp.dir>${project.build.directory}/plugins</plugins.tmp.dir>
     </properties>
 
@@ -140,6 +141,14 @@ under the License.
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-server-mock</artifactId>
             <version>${fabric8.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <type>jar</type>
             <scope>test</scope>
         </dependency>
     </dependencies>

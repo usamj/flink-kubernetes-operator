@@ -23,9 +23,9 @@
 # watchNamespaces: ["flink"]
 
 image:
-  repository: flink-kubernetes-operator
-  pullPolicy: IfNotPresent
-  tag: latest
+  repository: 782911722307.dkr.ecr.us-east-1.amazonaws.com/flink-kubernetes-operator
+  pullPolicy: Always
+  tag: 0.0.1
 
 rbac:
   create: true
@@ -59,7 +59,7 @@ operatorVolumes:
 #        claimName: flink-artifacts
 
 webhook:
-  create: true
+  create: false
   keystore:
     useDefaultPassword: true
   # passwordSecretRef:

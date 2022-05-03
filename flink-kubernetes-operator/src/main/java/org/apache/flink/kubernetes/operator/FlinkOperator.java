@@ -32,14 +32,15 @@ import org.apache.flink.kubernetes.operator.observer.sessionjob.SessionJobObserv
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
+import org.apache.flink.kubernetes.operator.service.FlinkNativeService;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.service.FlinkStandaloneService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.runtime.util.EnvironmentInformation;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
@@ -56,8 +57,10 @@ public class FlinkOperator {
     private final Operator operator;
 
     private final FlinkOperatorConfiguration operatorConfiguration;
-    private final KubernetesClient client;
+    private final DefaultKubernetesClient client;
     private final FlinkService flinkService;
+    private final FlinkNativeService flinkNativeService;
+    private final FlinkStandaloneService flinkStandaloneService;
     private final ConfigurationService configurationService;
     private final DefaultConfig defaultConfig;
 
@@ -74,16 +77,22 @@ public class FlinkOperator {
                 FlinkOperatorConfiguration.fromConfiguration(defaultConfig.getOperatorConfig());
         this.configurationService = getConfigurationService(operatorConfiguration);
         this.operator = new Operator(client, configurationService);
-        this.flinkService = new FlinkService(client, operatorConfiguration);
+        this.flinkStandaloneService = new FlinkStandaloneService(client, operatorConfiguration);
+        this.flinkNativeService = new FlinkNativeService(client, operatorConfiguration);
+        this.flinkService = flinkStandaloneService;
     }
 
     private void registerDeploymentController() {
         FlinkResourceValidator validator = new DefaultValidator();
         ReconcilerFactory reconcilerFactory =
-                new ReconcilerFactory(client, flinkService, operatorConfiguration);
+                new ReconcilerFactory(
+                        client, flinkNativeService, flinkStandaloneService, operatorConfiguration);
         ObserverFactory observerFactory =
                 new ObserverFactory(
-                        flinkService, operatorConfiguration, defaultConfig.getFlinkConfig());
+                        flinkNativeService,
+                        flinkStandaloneService,
+                        operatorConfiguration,
+                        defaultConfig.getFlinkConfig());
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(

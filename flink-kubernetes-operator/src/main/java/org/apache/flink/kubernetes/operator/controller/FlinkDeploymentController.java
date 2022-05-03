@@ -143,13 +143,20 @@ public class FlinkDeploymentController
     public List<EventSource> prepareEventSources(EventSourceContext<FlinkDeployment> ctx) {
         Preconditions.checkNotNull(controllerConfig, "Controller config cannot be null");
         Set<String> effectiveNamespaces = controllerConfig.getEffectiveNamespaces();
+        List<EventSource> eventSources;
         if (effectiveNamespaces.isEmpty()) {
-            return List.of(OperatorUtils.createJmDepInformerEventSource(kubernetesClient));
+            eventSources = OperatorUtils.createDeploymentEventSources(kubernetesClient);
         } else {
-            return effectiveNamespaces.stream()
-                    .map(ns -> OperatorUtils.createJmDepInformerEventSource(kubernetesClient, ns))
+            eventSources = effectiveNamespaces.stream()
+                    .map(ns -> OperatorUtils.createDeploymentEventSources(kubernetesClient, ns))
+                    .flatMap(List::stream)
                     .collect(Collectors.toList());
         }
+
+        for (EventSource es : eventSources) {
+            es.start();
+        }
+        return eventSources;
     }
 
     @Override

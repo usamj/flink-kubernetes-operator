@@ -43,7 +43,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /** Flink service mock for tests. */
-public class TestingFlinkService extends FlinkService {
+public class TestingFlinkService implements FlinkService {
 
     private int savepointCounter = 0;
     private int triggerCounter = 0;
@@ -53,10 +53,6 @@ public class TestingFlinkService extends FlinkService {
     private boolean isPortReady = true;
     private PodList podList = new PodList();
     private Consumer<Configuration> listJobConsumer = conf -> {};
-
-    public TestingFlinkService() {
-        super(null, null);
-    }
 
     public void clear() {
         jobs.clear();
@@ -114,7 +110,8 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public Optional<String> cancelJob(JobID jobID, UpgradeMode upgradeMode, Configuration conf)
+    public Optional<String> cancelJob(
+            JobID jobID, UpgradeMode upgradeMode, FlinkDeployment deployment, Configuration conf)
             throws Exception {
 
         if (upgradeMode == UpgradeMode.LAST_STATE) {
@@ -168,8 +165,17 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public PodList getJmPodList(FlinkDeployment deployment, Configuration conf) {
+    public PodList getJmPodList(Configuration conf) {
         return podList;
+    }
+
+    @Override
+    public void deleteCluster(
+            FlinkDeployment deployment, Configuration conf, boolean deleteHaData) {
+        String jobName = deployment.getMetadata().getName();
+        if (!jobs.removeIf(js -> js.f1.getJobName().equals(jobName))) {
+            throw new RuntimeException("Job not found");
+        }
     }
 
     public void setJmPodList(PodList podList) {

@@ -18,13 +18,8 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.utils.Constants;
-import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
-import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -32,12 +27,8 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** FlinkUtilsTest. */
 @EnableKubernetesMockClient(crud = true)
@@ -65,35 +56,5 @@ public class FlinkUtilsTest {
 
         assertEquals(pod2.getApiVersion(), mergedPod.getApiVersion());
         assertEquals(pod2.getSpec().getContainers(), mergedPod.getSpec().getContainers());
-    }
-
-    @Test
-    public void testDeleteJobGraphInKubernetesHA() {
-        final String name = "ha-configmap";
-        final String clusterId = "cluster-id";
-        final Map<String, String> data = new HashMap<>();
-        data.put(Constants.JOB_GRAPH_STORE_KEY_PREFIX + JobID.generate(), "job-graph-data");
-        data.put("leader", "localhost");
-        final ConfigMap kubernetesConfigMap =
-                new ConfigMapBuilder()
-                        .withNewMetadata()
-                        .withName(name)
-                        .withLabels(
-                                KubernetesUtils.getConfigMapLabels(
-                                        clusterId,
-                                        Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
-                        .endMetadata()
-                        .withData(data)
-                        .build();
-        kubernetesClient.configMaps().create(kubernetesConfigMap);
-        assertNotNull(kubernetesClient.configMaps().withName(name).get());
-        assertEquals(2, kubernetesClient.configMaps().withName(name).get().getData().size());
-
-        FlinkUtils.deleteJobGraphInKubernetesHA(
-                clusterId, kubernetesClient.getNamespace(), kubernetesClient);
-
-        assertEquals(1, kubernetesClient.configMaps().withName(name).get().getData().size());
-        assertTrue(
-                kubernetesClient.configMaps().withName(name).get().getData().containsKey("leader"));
     }
 }

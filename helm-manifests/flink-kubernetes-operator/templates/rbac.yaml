@@ -1,0 +1,151 @@
+---
+# Source: flink-kubernetes-operator/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flink-operator
+  namespace: default
+  labels:
+    app.kubernetes.io/name: flink-kubernetes-operator
+    app.kubernetes.io/version: "1.0-SNAPSHOT"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: flink-kubernetes-operator-1.0-SNAPSHOT
+rules:
+  - apiGroups:
+      - flink-operator
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - endpoints
+      - persistentvolumeclaims
+      - events
+      - configmaps
+      - secrets
+      - nodes
+    verbs:
+      - "*"
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - replicasets
+    verbs:
+      - "*"
+  - apiGroups:
+      - extensions
+    resources:
+      - deployments
+      - ingresses
+    verbs:
+      - "*"
+  - apiGroups:
+      - flink.apache.org
+    resources:
+      - flinkdeployments
+      - flinkdeployments/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - "*"
+---
+# Source: flink-kubernetes-operator/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flink-operator-cluster-role-binding
+  namespace: default
+  labels:
+    app.kubernetes.io/name: flink-kubernetes-operator
+    app.kubernetes.io/version: "1.0-SNAPSHOT"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: flink-kubernetes-operator-1.0-SNAPSHOT
+roleRef:
+  kind: ClusterRole
+  name: flink-operator
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: flink-operator
+    namespace: default
+---
+# Source: flink-kubernetes-operator/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flink
+  namespace: default
+  labels:
+    app.kubernetes.io/name: flink-kubernetes-operator
+    app.kubernetes.io/version: "1.0-SNAPSHOT"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: flink-kubernetes-operator-1.0-SNAPSHOT
+  annotations:
+    "helm.sh/resource-policy": keep
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - configmaps
+    verbs:
+      - '*'
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - '*'
+---
+# Source: flink-kubernetes-operator/templates/rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flink-role-binding
+  namespace: default
+  labels:
+    app.kubernetes.io/name: flink-kubernetes-operator
+    app.kubernetes.io/version: "1.0-SNAPSHOT"
+    app.kubernetes.io/managed-by: Helm
+    helm.sh/chart: flink-kubernetes-operator-1.0-SNAPSHOT
+  annotations:
+    "helm.sh/resource-policy": keep
+roleRef:
+  kind: Role
+  name: flink
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: flink
+    namespace: default
+---
+# Source: flink-kubernetes-operator/templates/rbac.yaml
+################################################################################
+#  Licensed to the Apache Software Foundation (ASF) under one
+#  or more contributor license agreements.  See the NOTICE file
+#  distributed with this work for additional information
+#  regarding copyright ownership.  The ASF licenses this file
+#  to you under the Apache License, Version 2.0 (the
+#  "License"); you may not use this file except in compliance
+#  with the License.  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+# limitations under the License.
+################################################################################
+---
+# Source: flink-kubernetes-operator/templates/rbac.yaml
+---

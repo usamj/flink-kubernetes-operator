@@ -17,7 +17,12 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.client.deployment.ClusterSpecification;
+import org.apache.flink.configuration.BlobServerOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -35,6 +40,8 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -62,7 +69,7 @@ import java.util.Optional;
 public class TestUtils {
 
     public static final String TEST_NAMESPACE = "flink-operator-test";
-    public static final String TEST_DEPLOYMENT_NAME = "test-cluster";
+    public static final String CLUSTER_ID = "test-cluster";
     public static final String TEST_SESSION_JOB_NAME = "test-session-job";
     public static final String SERVICE_ACCOUNT = "flink-operator";
     public static final String FLINK_VERSION = "latest";
@@ -70,14 +77,24 @@ public class TestUtils {
     public static final String IMAGE_POLICY = "IfNotPresent";
     public static final String SAMPLE_JAR = "local:///tmp/sample.jar";
 
+    public static final String TASK_MANAGER_MEMORY = "2048m";
+    public static final String JOB_MANAGER_MEMORY = "1024m";
+
+    public static final int TASK_MANAGER_MEMORY_MB =
+            MemorySize.parse(TASK_MANAGER_MEMORY).getMebiBytes();
+    public static final int JOB_MANAGER_MEMORY_MB =
+            MemorySize.parse(JOB_MANAGER_MEMORY).getMebiBytes();
+
+    public static final int SLOTS_PER_TASK_MANAGER = 2;
+
+    public static final int TASK_MANAGER_CPU = 4;
+    public static final int JOB_MANAGER_CPU = 2;
+
     public static FlinkDeployment buildSessionCluster() {
         FlinkDeployment deployment = new FlinkDeployment();
         deployment.setStatus(new FlinkDeploymentStatus());
         deployment.setMetadata(
-                new ObjectMetaBuilder()
-                        .withName(TEST_DEPLOYMENT_NAME)
-                        .withNamespace(TEST_NAMESPACE)
-                        .build());
+                new ObjectMetaBuilder().withName(CLUSTER_ID).withNamespace(TEST_NAMESPACE).build());
         deployment.setSpec(getTestFlinkDeploymentSpec());
         return deployment;
     }
@@ -106,7 +123,7 @@ public class TestUtils {
                         .build());
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()
-                        .clusterId(TEST_DEPLOYMENT_NAME)
+                        .clusterId(CLUSTER_ID)
                         .job(
                                 JobSpec.builder()
                                         .jarURI(SAMPLE_JAR)
@@ -132,8 +149,12 @@ public class TestUtils {
                 .serviceAccount(SERVICE_ACCOUNT)
                 .flinkVersion(FlinkVersion.v1_14)
                 .flinkConfiguration(conf)
-                .jobManager(new JobManagerSpec(new Resource(1, "2048m"), 1, null))
-                .taskManager(new TaskManagerSpec(new Resource(1, "2048m"), null))
+                .jobManager(
+                        new JobManagerSpec(
+                                new Resource(JOB_MANAGER_CPU, JOB_MANAGER_MEMORY), 1, null))
+                .taskManager(
+                        new TaskManagerSpec(
+                                new Resource(TASK_MANAGER_CPU, TASK_MANAGER_MEMORY), null, 1))
                 .build();
     }
 
@@ -290,5 +311,45 @@ public class TestUtils {
                 return Optional.of((T) deployment);
             }
         };
+    }
+
+    public static Configuration createTestFlinkConfig() {
+        Configuration flinkConfig = new Configuration();
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        flinkConfig = FlinkUtils.getEffectiveConfig(deployment, flinkConfig);
+        flinkConfig.setString(
+                TaskManagerOptions.RPC_PORT, String.valueOf(Constants.TASK_MANAGER_RPC_PORT));
+        flinkConfig.setString(BlobServerOptions.PORT, String.valueOf(Constants.BLOB_SERVER_PORT));
+        flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(Constants.REST_PORT));
+        return flinkConfig;
+    }
+
+    public static Configuration createTestFlinkConfig(FlinkDeployment deployment) {
+        Configuration flinkConfig = new Configuration();
+        flinkConfig = FlinkUtils.getEffectiveConfig(deployment, flinkConfig);
+        flinkConfig.setString(
+                TaskManagerOptions.RPC_PORT, String.valueOf(Constants.TASK_MANAGER_RPC_PORT));
+        flinkConfig.setString(BlobServerOptions.PORT, String.valueOf(Constants.BLOB_SERVER_PORT));
+        flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(Constants.REST_PORT));
+        return flinkConfig;
+    }
+
+    public static ClusterSpecification createClusterSpecification() {
+        return new ClusterSpecification.ClusterSpecificationBuilder()
+                .setMasterMemoryMB(JOB_MANAGER_MEMORY_MB)
+                .setTaskManagerMemoryMB(TASK_MANAGER_MEMORY_MB)
+                .setSlotsPerTaskManager(SLOTS_PER_TASK_MANAGER)
+                .createClusterSpecification();
+    }
+
+    public static final Map<String,String> generateTestStringStringMap(
+            String keyPrefix,
+            String valuePrefix,
+            int entries) {
+        Map<String, String> map = new HashMap<>();
+        for (int i = 1; i <= entries; i++) {
+            map.put(keyPrefix + i, valuePrefix + i);
+        }
+        return map;
     }
 }

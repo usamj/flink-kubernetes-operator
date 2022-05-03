@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.observer.deployment.SessionObserver;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
@@ -40,7 +41,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** {@link SessionObserver} unit tests. */
 public class SessionObserverTest {
@@ -134,7 +134,6 @@ public class SessionObserverTest {
 
                     @Override
                     public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
-                        assertNull(s);
                         secondaryResourceAccessed.addAndGet(1);
                         return Optional.of((T) k8sDeployment);
                     }
@@ -154,7 +153,7 @@ public class SessionObserverTest {
 
                     @Override
                     public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
-                        assertNull(s);
+                        assertEquals(OperatorUtils.getNativeJmDeploymentIdentifier("all"),s);
                         secondaryResourceAccessed.addAndGet(1);
                         return Optional.of((T) k8sDeployment);
                     }
@@ -174,7 +173,8 @@ public class SessionObserverTest {
 
                     @Override
                     public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
-                        assertEquals(deployment.getMetadata().getNamespace(), s);
+                        assertEquals(OperatorUtils.getNativeJmDeploymentIdentifier(
+                                deployment.getMetadata().getNamespace()), s);
                         secondaryResourceAccessed.addAndGet(1);
                         return Optional.of((T) k8sDeployment);
                     }

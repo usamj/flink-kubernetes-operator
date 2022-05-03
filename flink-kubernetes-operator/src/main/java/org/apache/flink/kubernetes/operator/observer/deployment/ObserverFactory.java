@@ -30,16 +30,19 @@ import java.util.concurrent.ConcurrentHashMap;
 /** The factory to create the observer based ob the {@link FlinkDeployment} mode. */
 public class ObserverFactory {
 
-    private final FlinkService flinkService;
+    private final FlinkService flinkNativeService;
+    private final FlinkService flinkStandaloneService;
     private final FlinkOperatorConfiguration operatorConfig;
     private final Configuration flinkConfig;
     private final Map<Mode, Observer<FlinkDeployment>> observerMap;
 
     public ObserverFactory(
-            FlinkService flinkService,
+            FlinkService flinkNativeService,
+            FlinkService flinkStandaloneService,
             FlinkOperatorConfiguration operatorConfiguration,
             Configuration flinkConfig) {
-        this.flinkService = flinkService;
+        this.flinkNativeService = flinkNativeService;
+        this.flinkStandaloneService = flinkStandaloneService;
         this.operatorConfig = operatorConfiguration;
         this.flinkConfig = flinkConfig;
         this.observerMap = new ConcurrentHashMap<>();
@@ -51,10 +54,17 @@ public class ObserverFactory {
                 mode -> {
                     switch (mode) {
                         case SESSION:
-                            return new SessionObserver(flinkService, operatorConfig, flinkConfig);
+                            return new SessionObserver(
+                                    flinkNativeService, operatorConfig, flinkConfig);
                         case APPLICATION:
                             return new ApplicationObserver(
-                                    flinkService, operatorConfig, flinkConfig);
+                                    flinkNativeService, operatorConfig, flinkConfig);
+                        case STANDALONE_SESSION:
+                            return new SessionObserver(
+                                    flinkStandaloneService, operatorConfig, flinkConfig);
+                        case STANDALONE_APPLICATION:
+                            return new ApplicationObserver(
+                                    flinkStandaloneService, operatorConfig, flinkConfig);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

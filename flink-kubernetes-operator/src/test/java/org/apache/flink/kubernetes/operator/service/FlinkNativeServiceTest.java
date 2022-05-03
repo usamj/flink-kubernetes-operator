@@ -31,19 +31,26 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.utils.Constants;
+import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
-import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -55,9 +62,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link FlinkService unit tests */
 @EnableKubernetesMockClient(crud = true)
-public class FlinkServiceTest {
-    KubernetesClient client;
+public class FlinkNativeServiceTest {
+    KubernetesMockServer mockServer;
+    private NamespacedKubernetesClient kubernetesClient;
     private final Configuration configuration = new Configuration();
+    final FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
     private static final String CLUSTER_ID = "testing-flink-cluster";
     private static final String TESTING_NAMESPACE = "test";
 
@@ -65,6 +74,9 @@ public class FlinkServiceTest {
     public void setup() {
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, CLUSTER_ID);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TESTING_NAMESPACE);
+        flinkDeployment.getMetadata().setNamespace(TESTING_NAMESPACE);
+        flinkDeployment.getMetadata().setName(CLUSTER_ID);
+        kubernetesClient = mockServer.createClient();
     }
 
     @Test
@@ -82,7 +94,8 @@ public class FlinkServiceTest {
 
         final JobID jobID = JobID.generate();
         Optional<String> result =
-                flinkService.cancelJob(jobID, UpgradeMode.STATELESS, configuration);
+                flinkService.cancelJob(
+                        jobID, UpgradeMode.STATELESS, flinkDeployment, configuration);
         assertTrue(cancelFuture.isDone());
         assertEquals(jobID, cancelFuture.get());
         assertFalse(result.isPresent());
@@ -107,7 +120,8 @@ public class FlinkServiceTest {
 
         final JobID jobID = JobID.generate();
         Optional<String> result =
-                flinkService.cancelJob(jobID, UpgradeMode.SAVEPOINT, configuration);
+                flinkService.cancelJob(
+                        jobID, UpgradeMode.SAVEPOINT, flinkDeployment, configuration);
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
         assertFalse(stopWithSavepointFuture.get().f1);
@@ -126,22 +140,26 @@ public class FlinkServiceTest {
                 new TestingClusterClient<>(configuration, CLUSTER_ID);
         final FlinkService flinkService = createFlinkService(testingClusterClient);
 
-        client.apps()
+        kubernetesClient
+                .apps()
                 .deployments()
                 .inNamespace(TESTING_NAMESPACE)
                 .create(createTestingDeployment());
         assertNotNull(
-                client.apps()
+                kubernetesClient
+                        .apps()
                         .deployments()
                         .inNamespace(TESTING_NAMESPACE)
                         .withName(CLUSTER_ID)
                         .get());
         final JobID jobID = JobID.generate();
         Optional<String> result =
-                flinkService.cancelJob(jobID, UpgradeMode.LAST_STATE, configuration);
+                flinkService.cancelJob(
+                        jobID, UpgradeMode.LAST_STATE, flinkDeployment, configuration);
         assertFalse(result.isPresent());
         assertNull(
-                client.apps()
+                kubernetesClient
+                        .apps()
                         .deployments()
                         .inNamespace(TESTING_NAMESPACE)
                         .withName(CLUSTER_ID)
@@ -171,7 +189,6 @@ public class FlinkServiceTest {
         final FlinkService flinkService = createFlinkService(testingClusterClient);
 
         final JobID jobID = JobID.generate();
-        final FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobId(jobID.toString());
         flinkDeployment.getStatus().setJobStatus(jobStatus);
@@ -182,9 +199,42 @@ public class FlinkServiceTest {
         assertFalse(triggerSavepointFuture.get().f2);
     }
 
-    private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
-        return new FlinkService(
-                client, FlinkOperatorConfiguration.fromConfiguration(configuration)) {
+    @Test
+    public void testDeleteJobGraphInKubernetesHA() throws Exception {
+        final TestingClusterClient<String> testingClusterClient =
+                new TestingClusterClient<>(configuration, CLUSTER_ID);
+        final String name = "ha-configmap";
+        final String clusterId = "cluster-id";
+        final Map<String, String> data = new HashMap<>();
+        data.put(Constants.JOB_GRAPH_STORE_KEY_PREFIX + JobID.generate(), "job-graph-data");
+        data.put("leader", "localhost");
+        final ConfigMap kubernetesConfigMap =
+                new ConfigMapBuilder()
+                        .withNewMetadata()
+                        .withName(name)
+                        .withLabels(
+                                KubernetesUtils.getConfigMapLabels(
+                                        clusterId,
+                                        Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
+                        .endMetadata()
+                        .withData(data)
+                        .build();
+        kubernetesClient.configMaps().create(kubernetesConfigMap);
+        assertNotNull(kubernetesClient.configMaps().withName(name).get());
+        assertEquals(2, kubernetesClient.configMaps().withName(name).get().getData().size());
+
+        final FlinkNativeService flinkService = createFlinkService(testingClusterClient);
+        flinkService.deleteJobGraphInKubernetesHA(
+                clusterId, kubernetesClient.getNamespace(), kubernetesClient);
+
+        assertEquals(1, kubernetesClient.configMaps().withName(name).get().getData().size());
+        assertTrue(
+                kubernetesClient.configMaps().withName(name).get().getData().containsKey("leader"));
+    }
+
+    private FlinkNativeService createFlinkService(ClusterClient<String> clusterClient) {
+        return new FlinkNativeService(
+                kubernetesClient, FlinkOperatorConfiguration.fromConfiguration(configuration)) {
             @Override
             protected ClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;
